@@ -2,9 +2,11 @@ import torch as T
 import torchvision
 import torchvision.transforms as tr
 
+from datasets import load_dataset
 from tqdm.auto import tqdm
 from argparse import ArgumentParser
 
+from dataset import HFDataset
 from backbone import ImageBackbone
 from unet import Generator
 from loss import DTLoss
@@ -36,8 +38,10 @@ if __name__ == "__main__":
         tr.Lambda(lambda t: (t * 2) - 1),
     ])
 
-    imagenet_train = torchvision.datasets.ImageNet("./imagenet", split="train", transform=train_transforms)
-    imagenet_valid = torchvision.datasets.ImageNet("./imagenet_valid", split="val", transform=valid_transforms)
+    dataset = load_dataset("./imagenet")
+
+    imagenet_train = HFDataset(dataset["train"], train_transforms)
+    imagenet_valid = HFDataset(dataset["valid"], valid_transforms)
 
     trainloader = T.utils.data.DataLoader(
         imagenet_train, batch_size=args.batch_size, shuffle=True, pin_memory=True
