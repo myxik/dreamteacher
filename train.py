@@ -84,3 +84,5 @@ if __name__ == "__main__":
 
             writer.add_scalar("monitor/loss", loss.item(), global_iters)
             global_iters += 1
+    
+    T.save(f.feature_extractor.state_dict(), "./model.pt")
