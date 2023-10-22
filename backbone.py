@@ -16,6 +16,7 @@ class FPN(nn.Module):
             for in_channel in in_channels
         ]
         self.conv_layers.reverse()
+        self.conv_layers = nn.ModuleList(self.conv_layers)
         self.pooling_conv = nn.Conv2d(pooling_out_channels, out_channel, 1, bias=False)
 
     def forward(self, pooling_out, feature_maps):
@@ -39,13 +40,13 @@ class PPM(nn.Module):
         super().__init__()
         self.pool_sizes = pool_sizes
         num_poolings = len(self.pool_sizes)
-        self.poolings = [
+        self.poolings = nn.ModuleList([
             nn.Sequential(
                 nn.AdaptiveAvgPool2d(pool_size),
                 nn.Conv2d(num_channels, num_channels // num_poolings, 1, bias=False),
             )
             for pool_size in self.pool_sizes
-        ]
+        ])
 
     def forward(self, x):
         assert len(x.shape) == 4
@@ -64,10 +65,10 @@ class ChannelBalancer(nn.Module):
     def __init__(self, channels_in, channels_out):
         super().__init__()
 
-        self.convs = [
+        self.convs = nn.ModuleList([
             nn.Conv2d(channel_in, channel_out, 1, bias=False) if channel_in!=channel_out else nn.Identity()
             for channel_in, channel_out in zip(channels_in, channels_out)
-        ]
+        ])
 
     def forward(self, feature_maps):
         output = []
@@ -85,9 +86,6 @@ class ImageBackbone(nn.Module):
             pretrained=False,
             features_only=True
         )
-
-        # dummy_inp = T.randn(1, 3, image_size, image_size)
-        # dummy_feats = self.feature_extractor(dummy_inp)  TODO: make it configurable all
 
         self.ppm = PPM([1,2,3,6], 2048)
         self.fpn = FPN([64, 256, 512, 1024], 1024, 4096)

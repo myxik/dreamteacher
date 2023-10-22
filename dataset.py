@@ -12,7 +12,7 @@ class HFDataset(Dataset):
         image = sample["image"]
         label = sample["label"]
 
-        return self.transform(image), label
+        return self.transforms(image), label
     
     def __len__(self):
         return len(self.ds)
