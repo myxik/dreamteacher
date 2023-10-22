@@ -6,3 +6,5 @@ tmp
 .hypothesis
 imagenet/
 imagenet_valid/
+.vscode/
+logs/
