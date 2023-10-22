@@ -1135,7 +1135,7 @@ def _extract_into_tensor(arr, timesteps, broadcast_shape):
                             dimension equal to the length of timesteps.
     :return: a tensor of shape [batch_size, 1, ...] where the shape has K dims.
     """
-    res = th.from_numpy(arr).to(device=timesteps.device)[timesteps].float()
+    res = arr.to(device=timesteps.device)[timesteps].float()
     while len(res.shape) < len(broadcast_shape):
         res = res[..., None]
     return res.expand(broadcast_shape)
@@ -1156,7 +1156,7 @@ class Generator(nn.Module):
             attention_resolutions.append(image_size // int(i))
         channel_mult = (1, 1, 2, 2, 4, 4)
         
-        self.alphas_cumprod = th.from_numpy(np.cumprod(alphas, axis=0))
+        alphas_cumprod = th.from_numpy(np.cumprod(alphas, axis=0))
         self.model = UNetModel(
             image_size=image_size,
             in_channels=3,
@@ -1177,10 +1177,13 @@ class Generator(nn.Module):
             use_new_attention_order=False,
             modules_to_extract=[3,6,9,12]
         )
+        self.register_buffer("alphas_cumprod", alphas_cumprod)
 
     @th.no_grad()    
     def forward(self, x):
         t = th.tensor([50] * x.shape[0])
         noise = th.randn_like(x)
+        t = t.to(x.device)
         o = _extract_into_tensor(th.sqrt(self.alphas_cumprod), t, x.shape) * x + _extract_into_tensor(th.sqrt(1 - self.alphas_cumprod), t, noise.shape) * noise
-        return o
+        _, layers = self.model(o, t)
+        return layers
