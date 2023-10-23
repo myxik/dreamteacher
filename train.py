@@ -1,11 +1,13 @@
 import torch as T
 import lovely_tensors as lj
+import torch.distributed as dist
 import torchvision.transforms as tr
 
 from datasets import load_dataset
 from tqdm.auto import tqdm
 from argparse import ArgumentParser
 from torch.utils.tensorboard.writer import SummaryWriter
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from dataset import HFDataset
 from backbone import ImageBackbone
@@ -27,8 +29,12 @@ def parse_args():
     return p.parse_args()
 
 
-if __name__ == "__main__":
+def train():
     args = parse_args()
+
+    dist.init_process_group("nccl")
+    rank = dist.get_rank()
+    device_id = rank % T.cuda.device_count()
 
     train_transforms = tr.Compose([
         tr.CenterCrop(args.image_size),
@@ -47,8 +53,14 @@ if __name__ == "__main__":
     imagenet_train = HFDataset(dataset["train"], train_transforms)
     imagenet_valid = HFDataset(dataset["validation"], valid_transforms)
 
+    trainsampler = T.utils.data.distributed.DistributedSampler(
+        imagenet_train,
+        num_replicas=T.cuda.device_count(),
+        rank=rank,
+    )
+
     trainloader = T.utils.data.DataLoader(
-        imagenet_train, batch_size=args.batch_size, shuffle=True, pin_memory=True
+        imagenet_train, batch_size=args.batch_size, pin_memory=True, sampler=trainsampler
     )
     validloader = T.utils.data.DataLoader(
         imagenet_valid, batch_size=args.batch_size, shuffle=False, pin_memory=True
@@ -57,11 +69,11 @@ if __name__ == "__main__":
     device = T.device(args.device)
     loss_fn = DTLoss(args.gamma)
     
-    g = Generator()
-    f = ImageBackbone([512, 512, 1024, 1024], args.image_size)
+    g = Generator().to(device_id)
+    f = ImageBackbone([512, 512, 1024, 1024], args.image_size).to(device_id)
 
-    g.to(device)
-    f.to(device)
+    g = DDP(g, device_ids=[device_id])
+    f = DDP(f, device_ids=[device_id])
 
     optimizer = T.optim.SGD(f.parameters(), lr=args.lr, nesterov=True, momentum=0.99)
 
@@ -84,5 +96,11 @@ if __name__ == "__main__":
 
             writer.add_scalar("monitor/loss", loss.item(), global_iters)
             global_iters += 1
-    
-    T.save(f.feature_extractor.state_dict(), "./model.pt")
+
+    if rank == 0:
+        T.save(f.feature_extractor.state_dict(), "./model.pt")
+    dist.destroy_process_group()
+
+
+if __name__ == "__main__":
+    train()
