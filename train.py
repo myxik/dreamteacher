@@ -23,7 +23,7 @@ def parse_args():
     p.add_argument("--lr", default=1e-3, type=float, required=False)
     p.add_argument("--num_epochs", default=300, type=int, required=False)
     p.add_argument("--device", default="cuda:1", type=str, required=False)
-    p.add_argument("--batch_size", default=16, type=int, required=False)
+    p.add_argument("--batch_size", default=32, type=int, required=False)
     p.add_argument("--gamma", default=10, type=float, required=False)
     p.add_argument("--image_size", default=256, type=int, required=False)
     return p.parse_args()
@@ -77,25 +77,27 @@ def train():
 
     optimizer = T.optim.SGD(f.parameters(), lr=args.lr, nesterov=True, momentum=0.99)
 
-    run_name = "DT-Exp1"
+    run_name = "DT-Exp2"
     writer = SummaryWriter(f"./logs/{run_name}")
 
     global_iters = 0
     for e in range(args.num_epochs):
         for images, _ in tqdm(trainloader):
-            images = images.to(device)
-
-            f_r_l = f(images)
-            f_g_l = g(images)
-
-            loss = loss_fn(f_g_l, f_r_l)
+            with T.autocast(device_type="cuda", dtype=T.bfloat16):
+                images = images.to(device)
+    
+                f_r_l = f(images)
+                f_g_l = g(images)
+    
+                loss = loss_fn(f_g_l, f_r_l)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            writer.add_scalar("monitor/loss", loss.item(), global_iters)
-            global_iters += 1
+            if rank == 0:
+                writer.add_scalar("monitor/loss", loss.item(), global_iters)
+                global_iters += 1
 
     if rank == 0:
         T.save(f.feature_extractor.state_dict(), "./model.pt")
